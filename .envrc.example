@@ -1,0 +1,12 @@
+# LM Studio configuration (OpenAI-compatible local API)
+export LM_STUDIO_BASE_URL="http://localhost:1234/v1"
+export LM_STUDIO_API_KEY="lm-studio"
+
+# The exact model name as it appears in LM Studio
+export LLM_MODEL="your-model-name-here"
+
+# Docker image for agent sessions
+export DOCKER_IMAGE="ubuntu:latest"
+
+# Seconds before an idle container is considered stale (0 = no timeout)
+export CONTAINER_TIMEOUT="0"
