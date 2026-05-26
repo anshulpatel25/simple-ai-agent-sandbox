@@ -51,8 +51,9 @@ class DockerContainerManager:
             print(result.stdout)
     """
 
-    def __init__(self, image: str = "ubuntu:latest") -> None:
+    def __init__(self, image: str = "ubuntu:latest", runtime: Optional[str] = None) -> None:
         self._image = image
+        self._runtime = runtime
         self._client: docker.DockerClient = docker.from_env()
         self._container: Optional[Container] = None
 
@@ -66,8 +67,8 @@ class DockerContainerManager:
             logger.info("Image not found locally, pulling…")
             self._client.images.pull(self._image)
 
-        logger.info("Creating container from %s…", self._image)
-        self._container = self._client.containers.run(
+        logger.info("Creating container from %s (runtime: %s)…", self._image, self._runtime or "default")
+        run_kwargs: dict = dict(
             image=self._image,
             command="sleep infinity",  # keep the container alive
             detach=True,
@@ -75,6 +76,9 @@ class DockerContainerManager:
             stdin_open=True,
             remove=False,  # we remove explicitly in destroy()
         )
+        if self._runtime is not None:
+            run_kwargs["runtime"] = self._runtime
+        self._container = self._client.containers.run(**run_kwargs)
         logger.info("Container started: %s", self._container.short_id)
 
     # -------------------------------------------------------------- teardown

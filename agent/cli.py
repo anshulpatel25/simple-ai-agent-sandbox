@@ -68,6 +68,8 @@ def _print_welcome(container_id: str) -> None:
                 (settings.llm_model, "green"),
                 ("\nImage:     ", "dim"),
                 (settings.docker_image, "green"),
+                ("\nRuntime:   ", "dim"),
+                (settings.container_runtime.value, "green"),
                 ("\n\nType ", "dim"),
                 ("exit", "bold yellow"),
                 (" or press ", "dim"),
@@ -133,7 +135,10 @@ def _run_repl(agent_graph, initial_messages: list) -> None:
 
 def main() -> None:
     """Application entry point – orchestrates container, skills, graph, REPL."""
-    with DockerContainerManager(image=settings.docker_image) as container_manager:
+    with DockerContainerManager(
+        image=settings.docker_image,
+        runtime=settings.container_runtime.value,
+    ) as container_manager:
         _print_welcome(container_manager.container_id or "unknown")
 
         # --- Build the skill registry

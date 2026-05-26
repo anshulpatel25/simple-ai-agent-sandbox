@@ -1,6 +1,20 @@
 """Application configuration loaded from environment variables / .env file."""
 
+from enum import Enum
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ContainerRuntime(str, Enum):
+    """Supported OCI container runtimes.
+
+    Attributes:
+        RUNC: The default Linux container runtime (``runc``).
+        RUNSC: The gVisor sandbox runtime (``runsc``), providing stronger isolation.
+    """
+
+    RUNC = "runc"
+    RUNSC = "runsc"
 
 
 class Settings(BaseSettings):
@@ -22,6 +36,7 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------- Docker
     docker_image: str = "ubuntu:latest"
     container_timeout: int = 0  # seconds; 0 = no timeout
+    container_runtime: ContainerRuntime = ContainerRuntime.RUNC
 
     # --------------------------------------------------------------- Skills
     skills_base_dir: str = "skills"

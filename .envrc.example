@@ -10,3 +10,6 @@ export DOCKER_IMAGE="ubuntu:latest"
 
 # Seconds before an idle container is considered stale (0 = no timeout)
 export CONTAINER_TIMEOUT="0"
+
+# OCI container runtime: runc (default) or runsc (gVisor, stronger isolation)
+export CONTAINER_RUNTIME="runc"

@@ -68,7 +68,7 @@ simple-ai-agent-sandbox/
 | Requirement | Notes |
 |---|---|
 | Python 3.12+ | |
-| uv | `curl -Lsf https://astral.sh/uv/install.sh | sh` |
+| uv | `curl -Lsf https://astral.sh/uv/install.sh` |
 | Docker | Must be running; user must have Docker socket access |
 | LM Studio | Running with a model loaded and the local server **enabled** |
 
