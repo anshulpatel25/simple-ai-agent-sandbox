@@ -9,27 +9,27 @@ A CLI-based AI agent where **every session runs inside its own ephemeral Ubuntu 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                  Host Machine                        │
-│                                                      │
-│  ┌──────────────┐   docker run    ┌──────────────┐  │
-│  │  cli.py      │ ──────────────► │  ubuntu:latest│  │
-│  │  (REPL)      │                 │  (per session)│  │
-│  │              │ ◄─ stdout/err ─ └──────────────┘  │
-│  └──────┬───────┘                                   │
-│         │                                            │
-│         ▼                                            │
-│  ┌──────────────┐                                    │
-│  │ LangGraph    │  agent → tools → agent loop        │
-│  │  ReAct Graph │                                    │
-│  └──────┬───────┘                                    │
-│         │                                            │
-│         ▼                                            │
-│  ┌──────────────┐                                    │
-│  │  LM Studio   │  OpenAI-compatible local API       │
+┌───────────────────────────────────────────────────────┐
+│                   Host Machine                        │
+│                                                       │
+│  ┌──────────────┐   docker run   ┌───────────────┐    │
+│  │  cli.py      │ ─────────────► │ ubuntu:latest │    │
+│  │  (REPL)      │                │ (per session) │    │
+│  │              │ ◄─ stdout/err ─└───────────────┘    │
+│  └──────┬───────┘                                     │
+│         │                                             │
+│         ▼                                             │
+│  ┌──────────────┐                                     │
+│  │  LangGraph   │  agent → tools → agent loop         │
+│  │  ReAct Graph │                                     │
+│  └──────┬───────┘                                     │
+│         │                                             │
+│         ▼                                             │
+│  ┌──────────────┐                                     │
+│  │  LM Studio   │  OpenAI-compatible local API        │
 │  │  (localhost) │  http://localhost:1234/v1           │
-│  └──────────────┘                                    │
-└─────────────────────────────────────────────────────┘
+│  └──────────────┘                                     │
+└───────────────────────────────────────────────────────┘
 ```
 
 ## Project Structure
