@@ -126,8 +126,8 @@ uv run agent
 ## Example Session
 
 ```
-╭─ Session Started ─────────────────────────────────╮
-│ 🤖  Simple AI Agent                               │
+╭─ Session Started ──────────────────────────────────╮
+│ 🤖  Simple AI Agent                                │
 │ Container: a3f2b1c                                 │
 │ Model:     lmstudio-community/Meta-Llama-3-8B      │
 │ Image:     ubuntu:latest                           │
