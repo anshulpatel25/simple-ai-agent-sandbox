@@ -8,6 +8,9 @@ A CLI-based AI agent where **every session runs inside its own ephemeral Ubuntu 
 
 ## Architecture
 
+The agent follows a ReAct pattern enhanced with interactive guardrails and persistent short-term memory.
+
+### System Overview
 ```
 ┌───────────────────────────────────────────────────────┐
 │                   Host Machine                        │
@@ -20,8 +23,8 @@ A CLI-based AI agent where **every session runs inside its own ephemeral Ubuntu 
 │         │                                             │
 │         ▼                                             │
 │  ┌──────────────┐                                     │
-│  │  LangGraph   │  agent → tools → agent loop         │
-│  │  ReAct Graph │                                     │
+│  │  LangGraph   │  agent → guardrails → tools loop    │
+│  │  ReAct Graph │  (with MemorySaver)                 │
 │  └──────┬───────┘                                     │
 │         │                                             │
 │         ▼                                             │
@@ -31,6 +34,32 @@ A CLI-based AI agent where **every session runs inside its own ephemeral Ubuntu 
 │  └──────────────┘                                     │
 └───────────────────────────────────────────────────────┘
 ```
+
+### Agent Flow (LangGraph)
+The following diagram shows how the agent processes user input and handles tool calls through guardrails:
+
+```mermaid
+graph TD
+    START((START)) --> Agent[agent node]
+    Agent --> Action{Action?}
+    Action -- "finish" --> END((END))
+    Action -- "tool_call" --> Guardrails[guardrails node]
+    Guardrails -- "approved" --> Tools[tools node]
+    Guardrails -- "rejected" --> Agent
+    Tools --> Agent
+```
+
+---
+
+## Key Features
+
+- **Ephemeral Sandboxing**: Every session runs in a fresh Docker container.
+- **Guardrail System**: Interactive confirmation for sensitive operations (e.g., file deletion).
+- **Short-term Memory**: Conversational context is maintained within a session using LangGraph's `MemorySaver`.
+- **Token Tracking**: Real-time display of LLM token usage (input/output).
+- **Extensible Skills**: Easy to add new capabilities via a modular skill system.
+
+---
 
 ## Project Structure
 
@@ -47,18 +76,23 @@ simple-ai-agent-sandbox/
 └── agent/
     ├── cli.py                 # REPL + wiring
     ├── config.py              # Pydantic Settings
+    ├── utils.py               # Path & resource utilities
     │
     ├── container/
     │   └── manager.py         # DockerContainerManager
     │
+    ├── guardrails/
+    │   ├── base.py            # Guardrail ABC + Registry
+    │   └── deletion.py        # FileDeletionGuardrail
+    │
     ├── skills/
     │   ├── base.py            # Skill ABC + SkillRegistry
-    │   └── bash_skill.py      # BashSkill (reads skill.md)
+    │   └── bash_skill.py      # BashSkill (runs bash in container)
     │
     └── graph/
         ├── state.py           # AgentState
-        ├── nodes.py           # agent_node + should_continue
-        └── graph.py           # build_graph()
+        ├── nodes.py           # Node implementations (agent, guardrails)
+        └── graph.py           # build_graph() factory
 ```
 
 ---
@@ -89,67 +123,22 @@ cd simple-ai-agent-sandbox
 uv sync
 ```
 
-`uv sync` reads `pyproject.toml`, creates a virtual environment in `.venv/`, and installs all dependencies in one step.
-
 ### 3. Configure environment
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` and set `LLM_MODEL` to the exact model identifier shown in LM Studio:
-
-```env
-LM_STUDIO_BASE_URL=http://localhost:1234/v1
-LM_STUDIO_API_KEY=lm-studio
-LLM_MODEL=lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF   # example
-DOCKER_IMAGE=ubuntu:latest
-```
+Edit `.env` and set `LLM_MODEL` to the exact model identifier shown in LM Studio.
 
 ### 4. Start LM Studio
 
 - Open LM Studio → load a model → click **"Start Server"**
-- Default address: `http://localhost:1234`
 
 ### 5. Run the agent
 
 ```bash
-# Preferred – uv runs inside the managed venv automatically
-uv run python main.py
-
-# Or use the installed script entry-point
 uv run agent
-```
-
----
-
-## Example Session
-
-```
-╭─ Session Started ──────────────────────────────────╮
-│ 🤖  Simple AI Agent                                │
-│ Container: a3f2b1c                                 │
-│ Model:     lmstudio-community/Meta-Llama-3-8B      │
-│ Image:     ubuntu:latest                           │
-│                                                    │
-│ Type exit or press Ctrl-C to quit.                 │
-╰────────────────────────────────────────────────────╯
-
-You: What OS is running inside the container?
-─────────────────────────────────────────────────────
-The container is running Ubuntu. Here's the output of `uname -a`:
-
-Linux a3f2b1c 5.15.0 #1 SMP ... x86_64 x86_64 x86_64 GNU/Linux
-
-You: Create a file called hello.txt with "Hello World" in it
-─────────────────────────────────────────────────────
-Done! I ran:
-    echo "Hello World" > hello.txt
-Let me verify: `cat hello.txt` → **Hello World**
-
-You: exit
-Goodbye!
-Container a3f2b1c removed.
 ```
 
 ---
@@ -157,42 +146,11 @@ Container a3f2b1c removed.
 ## Adding a New Skill
 
 1. Create `skills/<your-skill>/skill.md` documenting what the skill can do.
-2. Create `agent/skills/<your_skill>.py`:
+2. Create `agent/skills/<your_skill>.py` implementing the `Skill` ABC.
+3. Register it in `agent/cli.py` via `registry.register(MySkill())`.
 
-```python
-from agent.skills.base import Skill
-from langchain_core.tools import BaseTool, tool
+## Adding a New Guardrail
 
-class MySkill(Skill):
-    @property
-    def name(self) -> str:
-        return "my_skill"
-
-    def as_langchain_tool(self) -> BaseTool:
-        @tool
-        def my_tool(input: str) -> str:
-            """Tool description for the LLM."""
-            ...
-        return my_tool
-```
-
-3. Register it in `agent/cli.py`:
-
-```python
-registry.register(MySkill())
-```
-
-That's it – no other files need to change.
-
----
-
-## Environment Variables Reference
-
-| Variable | Default | Description |
-|---|---|---|
-| `LM_STUDIO_BASE_URL` | `http://localhost:1234/v1` | LM Studio API base URL |
-| `LM_STUDIO_API_KEY` | `lm-studio` | Dummy key (LM Studio ignores it) |
-| `LLM_MODEL` | `local-model` | Model identifier as shown in LM Studio |
-| `LLM_TEMPERATURE` | `0.0` | LLM sampling temperature |
-| `DOCKER_IMAGE` | `ubuntu:latest` | Docker image for agent containers |
-| `CONTAINER_TIMEOUT` | `0` | Idle timeout in seconds (0 = disabled) |
+1. Create `agent/guardrails/<your_guardrail>.py` implementing the `Guardrail` ABC.
+2. Implement the `check(tool_call)` method to return a confirmation prompt if triggered.
+3. Register it in `agent/cli.py` via `guardrail_registry.register(MyGuardrail())`.
