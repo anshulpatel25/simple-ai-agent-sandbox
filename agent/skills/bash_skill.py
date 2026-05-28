@@ -14,11 +14,12 @@ from langchain_core.tools import BaseTool, tool
 
 from agent.container.manager import DockerContainerManager
 from agent.skills.base import Skill
+from agent.utils import get_resource_path
 
 logger = logging.getLogger(__name__)
 
 # Path to the skill definition, relative to the project root.
-_SKILL_MD_PATH = Path("skills") / "bash" / "skill.md"
+_SKILL_MD_PATH = get_resource_path(Path("skills") / "bash" / "skill.md")
 
 
 def _load_skill_description(skill_md_path: Path) -> str:
