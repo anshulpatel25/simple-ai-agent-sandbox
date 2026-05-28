@@ -14,8 +14,11 @@ from __future__ import annotations
 import logging
 import sys
 
-from langchain_core.messages import HumanMessage
+from uuid import uuid4
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.memory import MemorySaver
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -89,14 +92,14 @@ def _print_response(content: str) -> None:
     console.print()
 
 
-def _run_repl(agent_graph, initial_messages: list) -> None:
+def _run_repl(agent_graph, thread_id: str) -> None:
     """Interactive REPL loop.
 
     Args:
         agent_graph: Compiled LangGraph application.
-        initial_messages: Pre-seeded messages (e.g. the system prompt).
+        thread_id: Unique identifier for the conversation thread.
     """
-    conversation: list = list(initial_messages)
+    config = {"configurable": {"thread_id": thread_id}}
 
     while True:
         try:
@@ -112,22 +115,23 @@ def _run_repl(agent_graph, initial_messages: list) -> None:
         if not user_input.strip():
             continue
 
-        conversation.append(HumanMessage(content=user_input))
-
         with console.status("[bold cyan]Thinking…[/bold cyan]", spinner="dots"):
             try:
-                result = agent_graph.invoke({"messages": conversation})
+                # We only need to pass the new message; LangGraph + MemorySaver
+                # handles the history.
+                result = agent_graph.invoke(
+                    {"messages": [HumanMessage(content=user_input)]},
+                    config=config,
+                )
             except Exception as exc:
                 console.print(f"[bold red]Agent error:[/bold red] {exc}")
                 continue
 
-        # Update conversation with the full returned history
+        # The full conversation history is in the returned state
         conversation = result["messages"]
 
         # Find and display the last AI message
-        ai_messages = [
-            m for m in conversation if hasattr(m, "content") and m.type == "ai"
-        ]
+        ai_messages = [m for m in conversation if isinstance(m, AIMessage)]
         if ai_messages:
             last_reply = ai_messages[-1].content
             _print_response(str(last_reply))
@@ -148,14 +152,18 @@ def main() -> None:
 
         # --- Build the LLM + graph
         llm = _build_llm()
-        agent_graph = build_graph(llm, tools)
+        memory = MemorySaver()
+        agent_graph = build_graph(llm, tools, checkpointer=memory)
 
-        # --- Seed the system prompt as the first message
-        from langchain_core.messages import SystemMessage
-        initial_messages = [SystemMessage(content=_SYSTEM_PROMPT)]
+        # --- Seed the system prompt and generate session ID
+        thread_id = str(uuid4())
+        agent_graph.update_state(
+            {"configurable": {"thread_id": thread_id}},
+            {"messages": [SystemMessage(content=_SYSTEM_PROMPT)]},
+        )
 
         # --- Start the interactive loop
-        _run_repl(agent_graph, initial_messages)
+        _run_repl(agent_graph, thread_id)
 
     console.print("[dim]Container cleaned up. Bye![/dim]")
 
