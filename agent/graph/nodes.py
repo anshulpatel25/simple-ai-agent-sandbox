@@ -8,11 +8,14 @@ with the existing state using the registered reducers.
 from __future__ import annotations
 
 import logging
+from typing import List
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
+from langgraph.types import interrupt
 
 from agent.graph.state import AgentState
+from agent.guardrails import Guardrail
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +62,68 @@ def should_continue(state: AgentState) -> str:
         state: Current graph state.
 
     Returns:
-        ``"tools"`` if the last AI message contains tool calls, else ``"end"``.
+        ``"guardrails"`` if the last AI message contains tool calls, else ``"end"``.
     """
     last_message = state["messages"][-1]
     if isinstance(last_message, AIMessage) and last_message.tool_calls:
-        logger.debug("Routing → tools (%d calls).", len(last_message.tool_calls))
-        return "tools"
+        logger.debug("Routing → guardrails (%d calls).", len(last_message.tool_calls))
+        return "guardrails"
     logger.debug("Routing → end.")
     return "end"
+
+def make_guardrail_node(guardrails: List[Guardrail]):
+    """Factory that creates the guardrail node.
+
+    Args:
+        guardrails: List of registered guardrails.
+
+    Returns:
+        A LangGraph-compatible node function.
+    """
+    def guardrail_node(state: AgentState) -> dict:
+        """Check the last AI message's tool calls against registered guardrails."""
+        last_message = state["messages"][-1]
+        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+            return {}
+
+        for tool_call in last_message.tool_calls:
+            for guardrail in guardrails:
+                prompt = guardrail.check(tool_call)
+                if prompt:
+                    logger.info("Guardrail '%s' triggered.", guardrail.name)
+                    # Use LangGraph interrupt to pause for human confirmation
+                    response = interrupt(prompt)
+
+                    # If the user says anything other than "yes", we "cancel" the tool call
+                    # by returning a ToolMessage with an error/cancellation message.
+                    if str(response).lower().strip() not in {"yes", "y", "true", "1"}:
+                        logger.info("User declined guardrail confirmation.")
+                        # If ANY tool call is cancelled, we cancel them ALL for consistency
+                        # and to avoid the ToolNode crash.
+                        return {
+                            "messages": [
+                                ToolMessage(
+                                    tool_call_id=tc["id"],
+                                    content=f"Action cancelled by user: {prompt}",
+                                ) for tc in last_message.tool_calls
+                            ]
+                        }
+
+        return {}
+
+    return guardrail_node
+
+def should_continue_from_guardrails(state: AgentState) -> str:
+    """Routing function: decide whether to proceed to tools or go back to agent.
+
+    Args:
+        state: Current graph state.
+
+    Returns:
+        ``"tools"`` if the last message is an AIMessage (no guardrails triggered cancellation),
+        ``"agent"`` if the last message is a ToolMessage (guardrail cancelled).
+    """
+    last_message = state["messages"][-1]
+    if isinstance(last_message, AIMessage):
+        return "tools"
+    return "agent"
