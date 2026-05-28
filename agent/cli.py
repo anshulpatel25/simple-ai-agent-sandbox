@@ -95,6 +95,49 @@ def _print_response(content: str) -> None:
     console.print()
 
 
+def _extract_token_usage(message: AIMessage) -> tuple[int, int]:
+    """Extract input and output tokens from an AIMessage.
+
+    Args:
+        message: The AI message to extract usage from.
+
+    Returns:
+        A tuple of (input_tokens, output_tokens).
+    """
+    input_tokens = 0
+    output_tokens = 0
+
+    # LangChain 0.3+ usage_metadata
+    usage_metadata = getattr(message, "usage_metadata", None)
+    if usage_metadata:
+        input_tokens = usage_metadata.get("input_tokens", 0)
+        output_tokens = usage_metadata.get("output_tokens", 0)
+    # Fallback to response_metadata (often used by older providers or specific integrations)
+    elif "token_usage" in message.response_metadata:
+        usage = message.response_metadata["token_usage"]
+        input_tokens = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+
+    return input_tokens, output_tokens
+
+
+def _print_token_usage(input_tokens: int, output_tokens: int) -> None:
+    """Render token usage using Rich."""
+    if input_tokens == 0 and output_tokens == 0:
+        return
+
+    total_tokens = input_tokens + output_tokens
+    usage_text = Text.assemble(
+        ("Tokens: ", "dim"),
+        (str(input_tokens), "cyan"),
+        (" input, ", "dim"),
+        (str(output_tokens), "cyan"),
+        (" output ", "dim"),
+        (f"({total_tokens} total)", "dim italic"),
+    )
+    console.print(usage_text, justify="right")
+
+
 def _run_repl(agent_graph, thread_id: str) -> None:
     """Interactive REPL loop.
 
@@ -119,6 +162,14 @@ def _run_repl(agent_graph, thread_id: str) -> None:
             continue
 
         graph_input = {"messages": [HumanMessage(content=user_input)]}
+        total_input_tokens = 0
+        total_output_tokens = 0
+
+        # Initialize processed IDs with existing messages to only count new ones in this turn
+        state = agent_graph.get_state(config)
+        processed_message_ids: set[str] = {
+            msg.id for msg in state.values.get("messages", []) if msg.id
+        }
 
         while True:
             with console.status("[bold cyan]Thinking…[/bold cyan]", spinner="dots"):
@@ -132,6 +183,15 @@ def _run_repl(agent_graph, thread_id: str) -> None:
                 except Exception as exc:
                     console.print(f"[bold red]Agent error:[/bold red] {exc}")
                     break
+
+            # Accumulate tokens from all AI messages in this turn
+            for msg in result["messages"]:
+                if isinstance(msg, AIMessage) and msg.id not in processed_message_ids:
+                    in_t, out_t = _extract_token_usage(msg)
+                    total_input_tokens += in_t
+                    total_output_tokens += out_t
+                    if msg.id:
+                        processed_message_ids.add(msg.id)
 
             # Check for interrupts
             state = agent_graph.get_state(config)
@@ -155,6 +215,7 @@ def _run_repl(agent_graph, thread_id: str) -> None:
                     last_reply = ai_messages[-1].content
                     if last_reply:
                         _print_response(str(last_reply))
+                _print_token_usage(total_input_tokens, total_output_tokens)
                 break
 
 
