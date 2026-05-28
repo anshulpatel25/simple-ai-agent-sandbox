@@ -154,3 +154,20 @@ uv run agent
 1. Create `agent/guardrails/<your_guardrail>.py` implementing the `Guardrail` ABC.
 2. Implement the `check(tool_call)` method to return a confirmation prompt if triggered.
 3. Register it in `agent/cli.py` via `guardrail_registry.register(MyGuardrail())`.
+
+## Evaluation & Tracing
+
+This project uses [DeepEval](https://deepeval.com/) for quality assurance and LLM evaluation.
+
+### Tracing
+To enable DeepEval tracing in the CLI, set `DEEPEVAL_TRACING=true` in your `.env` file or environment:
+```bash
+DEEPEVAL_TRACING=true uv run agent
+```
+
+### Running Evaluations
+Automated evaluations are located in `tests/eval/`. To run them:
+```bash
+uv run pytest tests/eval/
+```
+Note: A running LLM backend (like LM Studio) is required for evaluations to execute.

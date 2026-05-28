@@ -145,7 +145,8 @@ def _run_repl(agent_graph, thread_id: str) -> None:
         agent_graph: Compiled LangGraph application.
         thread_id: Unique identifier for the conversation thread.
     """
-    config = {"configurable": {"thread_id": thread_id}}
+    if settings.deepeval_tracing:
+        console.print("[dim]DeepEval tracing enabled.[/dim]")
 
     while True:
         try:
@@ -160,6 +161,14 @@ def _run_repl(agent_graph, thread_id: str) -> None:
 
         if not user_input.strip():
             continue
+
+        config = {"configurable": {"thread_id": thread_id}}
+        if settings.deepeval_tracing:
+            try:
+                from deepeval.integrations.langchain.callback import CallbackHandler
+                config["callbacks"] = [CallbackHandler()]
+            except ImportError:
+                pass
 
         graph_input = {"messages": [HumanMessage(content=user_input)]}
         total_input_tokens = 0

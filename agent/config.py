@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------- Skills
     skills_base_dir: str = "skills"
 
+    # ------------------------------------------------------------ DeepEval
+    deepeval_tracing: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.0",
     "python-dotenv>=1.0",
     "rich>=13.0",
+    "deepeval>=4.0.4",
 ]
 
 [project.scripts]
