@@ -11,10 +11,11 @@ so it can be unit-tested independently of Docker and LM Studio.
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Literal, Optional
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -28,13 +29,18 @@ NODE_AGENT = "agent"
 NODE_TOOLS = "tools"
 
 
-def build_graph(llm: BaseChatModel, tools: list[BaseTool]) -> StateGraph:
+def build_graph(
+    llm: BaseChatModel,
+    tools: list[BaseTool],
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+) -> StateGraph:
     """Compile and return the agent's LangGraph :class:`StateGraph`.
 
     Args:
         llm: The base chat model. It will be bound to ``tools`` inside this
              function, so callers should pass the *unbound* model.
         tools: List of LangChain tools the agent may invoke.
+        checkpointer: Optional checkpointer for short-term memory.
 
     Returns:
         A compiled LangGraph application ready to ``.invoke()``.
@@ -61,6 +67,6 @@ def build_graph(llm: BaseChatModel, tools: list[BaseTool]) -> StateGraph:
     )
     graph.add_edge(NODE_TOOLS, NODE_AGENT)  # loop back after tool execution
 
-    compiled = graph.compile()
+    compiled = graph.compile(checkpointer=checkpointer)
     logger.debug("Graph compiled with %d tool(s).", len(tools))
     return compiled
