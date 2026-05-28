@@ -1,6 +1,10 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
+
+# DeepEval
+.deepeval/
+.env.local
 *$py.class
 
 # C extensions
