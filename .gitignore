@@ -4,6 +4,7 @@ __pycache__/
 
 # DeepEval
 .deepeval/
+.env.local
 *$py.class
 
 # C extensions
