@@ -82,6 +82,7 @@ def build_graph(
         {
             "tools": NODE_TOOLS,
             "agent": NODE_AGENT,
+            "end": END,
         }
     )
     graph.add_edge(NODE_TOOLS, NODE_AGENT)  # loop back after tool execution

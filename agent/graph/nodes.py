@@ -12,6 +12,7 @@ from typing import List
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
+
 from langgraph.types import interrupt
 
 from agent.graph.state import AgentState
@@ -94,36 +95,49 @@ def make_guardrail_node(guardrails: List[Guardrail]):
                     # Use LangGraph interrupt to pause for human confirmation
                     response = interrupt(prompt)
 
-                    # If the user says anything other than "yes", we "cancel" the tool call
-                    # by returning a ToolMessage with an error/cancellation message.
+                    # If the user says anything other than "yes", cancel all tool calls
+                    # and inject a deterministic AIMessage so the LLM is never re-invoked.
+                    # This prevents the LLM from hallucinating a "success" response.
                     if str(response).lower().strip() not in {"yes", "y", "true", "1"}:
                         logger.info("User declined guardrail confirmation.")
-                        # If ANY tool call is cancelled, we cancel them ALL for consistency
-                        # and to avoid the ToolNode crash.
-                        return {
-                            "messages": [
-                                ToolMessage(
-                                    tool_call_id=tc["id"],
-                                    content=f"Action cancelled by user: {prompt}",
-                                ) for tc in last_message.tool_calls
-                            ]
-                        }
+                        cancellation_tool_messages = [
+                            ToolMessage(
+                                tool_call_id=tc["id"],
+                                content="Action cancelled by user.",
+                            )
+                            for tc in last_message.tool_calls
+                        ]
+                        # Append a hardcoded AIMessage so the graph routes to END
+                        # without ever calling the LLM again (avoids hallucination).
+                        cancellation_reply = AIMessage(
+                            content="Action cancelled. The operation was not performed — nothing has been deleted or changed."
+                        )
+                        return {"messages": cancellation_tool_messages + [cancellation_reply]}
 
         return {}
 
     return guardrail_node
 
 def should_continue_from_guardrails(state: AgentState) -> str:
-    """Routing function: decide whether to proceed to tools or go back to agent.
+    """Routing function: decide whether to proceed to tools, end, or go back to agent.
 
     Args:
         state: Current graph state.
 
     Returns:
-        ``"tools"`` if the last message is an AIMessage (no guardrails triggered cancellation),
-        ``"agent"`` if the last message is a ToolMessage (guardrail cancelled).
+        - ``"tools"`` – guardrails passed; last message is the original AIMessage
+          that still carries tool_calls.
+        - ``"end"`` – guardrail was triggered and the user declined; last message
+          is the injected cancellation AIMessage (no tool_calls), so we skip the
+          LLM entirely and terminate the turn.
+        - ``"agent"`` – fallback (should not normally be reached).
     """
     last_message = state["messages"][-1]
     if isinstance(last_message, AIMessage):
-        return "tools"
+        # Original agent AIMessage has tool_calls → safe to proceed to tools.
+        # Injected cancellation AIMessage has no tool_calls → go straight to end.
+        if last_message.tool_calls:
+            return "tools"
+        return "end"
+    # Fallback: ToolMessage present without a cancellation AIMessage.
     return "agent"
